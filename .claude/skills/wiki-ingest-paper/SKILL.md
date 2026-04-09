@@ -5,194 +5,167 @@ description: Search and ingest academic papers from arXiv/PMC into the wiki. Sup
 
 # Wiki Ingest Paper Skill
 
-Search for academic papers and ingest them into the wiki. Uses DeepXiv API for paper discovery and content retrieval.
+Search for academic papers and ingest them into the wiki with full extraction pipeline.
 
 ## Usage
 
 ```
+# Search and interactively select papers
 /wiki-ingest-paper --search "agent memory"
-/wiki-ingest-paper --search "transformer" --limit 10 --categories cs.AI,cs.CL
-/wiki-ingest-paper --trending --days 7
+/wiki-ingest-paper --search "RAG" --categories cs.CL,cs.AI --limit 20
+
+# Direct import by arXiv ID
 /wiki-ingest-paper --arxiv 2409.05591
-/wiki-ingest-paper --pmc PMC544940
+/wiki-ingest-paper --arxiv 2409.05591 2409.05592 2409.05593
+
+# Trending papers
+/wiki-ingest-paper --trending --days 7 --limit 20
+```
+
+## CLI Command
+
+```bash
+uv run python .claude/skills/wiki-ingest-paper/bin/wiki_ingest_paper.py [options]
 ```
 
 ## Workflow
 
-### Step 1: Paper Discovery
+```
+/wiki-ingest-paper --search "agent memory"
+         │
+         ▼
+    ┌─────────────────┐
+    │  DeepXiv Search │  ← 搜索论文
+    └────────┬────────┘
+             │
+             ▼
+    ┌─────────────────┐
+    │ 显示搜索结果     │  ← 展示标题、引用数、摘要
+    │ 让用户选择论文   │
+    └────────┬────────┘
+             │
+             ▼
+    ┌─────────────────┐
+    │  获取论文全文    │  ← DeepXiv API 返回 Markdown
+    └────────┬────────┘
+             │
+             ▼
+    ┌─────────────────┐
+    │  LLM 知识提取    │  ← OpenAI API 提取实体/概念
+    └────────┬────────┘
+             │
+             ▼
+    ┌─────────────────┐
+    │  写入 Wiki      │  ← sources/, entities/, concepts/
+    └─────────────────┘
+```
 
-Use DeepXiv to find relevant papers:
+## Search Options
 
-**Search by keyword:**
+| 参数 | 示例 | 说明 |
+|------|------|------|
+| `--search` | "agent memory" | 搜索关键词 |
+| `--limit` | 20 | 返回结果数 (默认 10, 最大 100) |
+| `--categories` | cs.AI,cs.CL | 按类别筛选 |
+| `--min-citations` | 50 | 最少引用数 |
+
+## Direct Import
+
+直接传入 arXiv ID，跳过搜索步骤：
+
 ```bash
-uv run python .claude/shared/bin/deepxiv_fetcher.py --search "agent memory" --limit 10
+# 单篇论文
+/wiki-ingest-paper --arxiv 2409.05591
+
+# 多篇论文
+/wiki-ingest-paper --arxiv 2409.05591 2409.05592 2409.05593
 ```
 
-**Get trending papers:**
-```bash
-uv run python .claude/shared/bin/deepxiv_fetcher.py --trending --days 7 --limit 20
-```
+## Trending Papers
 
-**Filter options:**
-- `--categories cs.AI,cs.CL` - Filter by arXiv categories
-- `--min-citations 50` - Minimum citation count
-- `--date-from 2024-01-01 --date-to 2024-12-31` - Date range
-
-### Step 2: Paper Selection
-
-Present search results to user:
-
-```
-Found 10 papers for "agent memory":
-
-1. MemGPT: Towards LLMs as Operating Systems (arXiv:2310.08560)
-   Citations: 156 | 2023-10-12
-   Abstract: This paper introduces MemGPT, a system that...
-
-2. Generative Agents: Interactive Simulacra of Human Behavior (arXiv:2304.03442)
-   Citations: 289 | 2023-04-07
-   ...
-
-Which papers would you like to ingest? (Enter numbers or arXiv IDs)
-```
-
-### Step 3: Fetch Full Content
-
-For each selected paper, fetch the full markdown content:
+获取近期热门论文：
 
 ```bash
-# Full paper
-uv run python .claude/shared/bin/deepxiv_fetcher.py --arxiv 2409.05591
-
-# Or preview first (faster)
-uv run python .claude/shared/bin/deepxiv_fetcher.py --arxiv 2409.05591 --preview
-
-# Or specific section
-uv run python .claude/shared/bin/deepxiv_fetcher.py --arxiv 2409.05591 --section Introduction
+/wiki-ingest-paper --trending --days 7 --limit 20
 ```
 
-The fetcher automatically saves to `raw/` directory:
-- `raw/{paper-title}.md` - Markdown content
-- Returns `saved_to` path in JSON
-
-### Step 4: Extract Knowledge
-
-Use existing extraction pipeline:
-
-**Option A: Use wiki-ingest-llm (recommended for batch)**
-```bash
-uv run python .claude/skills/wiki-ingest-llm/bin/wiki_ingest_llm.py raw/paper1.md raw/paper2.md
-```
-
-**Option B: Use wiki-ingest (sub-agent extraction)**
-Invoke `/wiki-ingest raw/paper.md` for each paper.
-
-### Step 5: Report Results
-
-Summarize what was ingested:
-
-```
-Ingested 3 papers:
-- MemGPT (arXiv:2310.08560) → sources/memgpt.md, 5 entities, 3 concepts
-- Generative Agents (arXiv:2304.03442) → sources/generative-agents.md, 4 entities, 2 concepts
-- Attention Is All You Need (arXiv:1706.03762) → sources/attention-is-all-you-need.md, 6 entities, 4 concepts
-
-Total: 3 sources, 15 entities, 9 concepts created
-```
-
-## Paper Content Modes
-
-| Mode | Flag | Content | Use Case |
-|------|------|---------|----------|
-| Full | (default) | Complete markdown | Full analysis |
-| Brief | `--brief` | Title, TLDR, keywords, citations | Quick evaluation |
-| Preview | `--preview` | First 10k characters | Quick scan |
-| Section | `--section NAME` | Specific section only | Targeted reading |
-| Head | `--head` | Metadata + structure | Overview |
-
-## Search Parameters
-
-| Parameter | Example | Description |
-|-----------|---------|-------------|
-| `--search` | "agent memory" | Search query |
-| `--limit` | 20 | Max results (default: 10, max: 100) |
-| `--categories` | cs.AI,cs.CL | Filter by arXiv categories |
-| `--min-citations` | 50 | Minimum citation count |
-| `--date-from` | 2024-01-01 | Publication date from |
-| `--date-to` | 2024-12-31 | Publication date to |
+`--days` 可选值：7, 14, 30
 
 ## Common arXiv Categories
 
-- `cs.AI` - Artificial Intelligence
-- `cs.CL` - Computation and Language (NLP)
-- `cs.CV` - Computer Vision
-- `cs.LG` - Machine Learning
-- `cs.RO` - Robotics
-- `cs.SE` - Software Engineering
-- `stat.ML` - Machine Learning (Statistics)
+- `cs.AI` - 人工智能
+- `cs.CL` - 计算与语言 (NLP)
+- `cs.CV` - 计算机视觉
+- `cs.LG` - 机器学习
+- `cs.RO` - 机器人
+- `cs.SE` - 软件工程
+- `stat.ML` - 机器学习 (统计)
+
+## Interactive Selection
+
+搜索后会显示结果列表，用户可以：
+
+```
+Enter paper numbers to ingest (e.g., '1,3,5' or '1-3' or 'all'):
+```
+
+- `1,3,5` - 选择第 1、3、5 篇
+- `1-3` - 选择第 1 到第 3 篇
+- `all` 或回车 - 选择全部
+
+## Example Output
+
+```
+🔍 Searching for: 'agent memory'...
+
+Found 10000 papers (showing 10):
+
+1. Memory Intelligence Agent
+   arXiv: 2604.04503 | Citations: None
+   Deep research agents (DRAs) integrate LLM reasoning...
+
+2. Agent Workflow Memory
+   arXiv: 2409.07429 | Citations: 73
+   Despite the potential of language model-based agents...
+
+Enter paper numbers to ingest: 1,2
+
+📚 Ingesting 2 papers...
+
+[1/2] Processing arXiv:2604.04503...
+  ✅ Memory Intelligence Agent: 5 entities, 3 concepts
+
+[2/2] Processing arXiv:2409.07429...
+  ✅ Agent Workflow Memory: 4 entities, 2 concepts
+
+📝 Writing wiki pages to wiki...
+Created: sources[2], entities[9], concepts[5]
+
+✅ Successfully ingested 2 papers!
+```
 
 ## Configuration
 
-DeepXiv token is auto-registered on first use. To configure manually:
+DeepXiv token 自动注册（首次使用时）。OpenAI API key 需要配置：
 
 ```bash
-# Via environment variable
-export DEEPXIV_TOKEN="your-token"
-
-# Or run any deepxiv command (auto-registers)
-uv run python .claude/shared/bin/deepxiv_fetcher.py --search "test"
-```
-
-## Error Handling
-
-- **No token**: Auto-register a free token
-- **Rate limit**: Daily limit 10,000 requests. Wait or request higher limit at https://data.rag.ac.cn/register
-- **Paper not found**: Check arXiv ID format (e.g., `2409.05591`)
-- **Empty content**: Paper may be too new or not parsed yet
-
-## Examples
-
-### Example 1: Research a new topic
-
-```
-User: I want to learn about RAG systems
-
-/wiki-ingest-paper --search "retrieval augmented generation" --limit 10 --categories cs.CL,cs.AI
-
-[Present results, user selects papers 1, 3, 5]
-
-[Fetch and ingest selected papers]
-```
-
-### Example 2: Track recent trends
-
-```
-User: What are the hot papers this week?
-
-/wiki-ingest-paper --trending --days 7 --limit 20
-
-[Present trending papers with social metrics]
-
-User: Ingest the top 5
-
-[Fetch and ingest top 5 papers]
-```
-
-### Example 3: Direct paper lookup
-
-```
-User: Add paper 2310.08560 to the wiki
-
-/wiki-ingest-paper --arxiv 2310.08560
-
-[Fetch full paper, save to raw/, then ingest]
+export OPENAI_API_KEY="your-key"
+# 或运行 /wiki-init 配置
 ```
 
 ## Integration with Wiki
 
-Papers are ingested as:
-- **Source page**: `wiki/sources/{paper-title}.md`
-- **Entities**: Authors, datasets, methods mentioned
-- **Concepts**: Key ideas, frameworks, techniques
+论文导入后生成：
 
-Cross-references use Obsidian syntax: `[[Attention Mechanism]]`, `[[Transformer]]`
+- **Source page**: `wiki/sources/{paper-title}.md`
+  - 完整摘要
+  - 关键要点
+  - 提及的实体和概念
+
+- **Entity pages**: `wiki/entities/{name}.md`
+  - 作者、数据集、方法等
+
+- **Concept pages**: `wiki/concepts/{name}.md`
+  - 关键思想、框架、技术
+
+交叉引用使用 Obsidian 语法：`[[MemoRAG]]`, `[[RAG]]`
