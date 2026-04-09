@@ -1,0 +1,166 @@
+#!/bin/bash
+# Interactive setup script for Everything is Knowledge
+# Creates wiki structure, installs dependencies, and configures API keys
+
+set -e
+
+echo "=== Everything is Knowledge Setup ==="
+echo ""
+
+# Check Python version
+PYTHON_VERSION=$(python3 --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' || echo "0")
+REQUIRED_VERSION="3.12"
+
+if [[ "$PYTHON_VERSION" < "$REQUIRED_VERSION" ]]; then
+    echo "❌ Python $REQUIRED_VERSION+ required. Found: Python $PYTHON_VERSION"
+    echo "   Install Python: https://www.python.org/downloads/"
+    exit 1
+fi
+
+echo "✓ Python $PYTHON_VERSION"
+
+# Install uv if not present
+if ! command -v uv &> /dev/null; then
+    echo "Installing uv package manager..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+echo "✓ uv package manager"
+
+# Install dependencies
+echo "Installing Python dependencies..."
+uv sync
+echo "✓ Dependencies installed"
+
+# Create wiki directory structure
+echo "Creating wiki structure..."
+mkdir -p wiki/entities wiki/concepts wiki/sources wiki/synthesis raw
+
+# Create initial files
+if [ ! -f wiki/index.md ]; then
+    cat > wiki/index.md << 'EOF'
+# Wiki Index
+
+Last updated: YYYY-MM-DD
+
+## Sources
+
+## Entities
+
+## Concepts
+
+## Recent Activity
+EOF
+fi
+
+if [ ! -f wiki/log.md ]; then
+    cat > wiki/log.md << 'EOF'
+# Wiki Log
+
+Append-only log of all wiki operations.
+
+EOF
+fi
+echo "✓ Wiki structure"
+
+echo ""
+echo "=== API Configuration ==="
+echo ""
+
+# --- MinerU API Key ---
+echo "📄 MinerU API Key (PDF parsing)"
+echo "   Register at: https://mineru.net"
+echo "   Free tier available for testing"
+echo ""
+
+CURRENT_MINERU=$(uv run python .claude/skills/wiki-ingest/bin/wiki_config.py get mineru_api_key 2>/dev/null || echo "")
+
+if [ -n "$CURRENT_MINERU" ]; then
+    echo "   Current: configured (hidden)"
+    read -p "   Update MinerU key? (y/N): " UPDATE_MINERU
+    if [[ "$UPDATE_MINERU" =~ ^[Yy]$ ]]; then
+        read -p "   Enter new MinerU API key: " NEW_MINERU
+        if [ -n "$NEW_MINERU" ]; then
+            uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set mineru_api_key "$NEW_MINERU"
+            echo "   ✓ Updated"
+        fi
+    fi
+else
+    echo "   Status: not configured"
+    read -p "   Enter MinerU API key (or press Enter to skip): " NEW_MINERU
+    if [ -n "$NEW_MINERU" ]; then
+        uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set mineru_api_key "$NEW_MINERU"
+        echo "   ✓ Configured"
+    else
+        echo "   ⚠ Skipped (PDF parsing will not work)"
+    fi
+fi
+
+echo ""
+
+# --- OpenAI API Key ---
+echo "🎤 OpenAI API Key (video transcription)"
+echo "   Used for Whisper transcription of Bilibili videos"
+echo "   Compatible endpoints: OpenAI, Azure, or any OpenAI-compatible API"
+echo ""
+
+CURRENT_OPENAI=$(uv run python .claude/skills/wiki-ingest/bin/wiki_config.py get openai_api_key 2>/dev/null || echo "")
+
+if [ -n "$CURRENT_OPENAI" ]; then
+    echo "   Current: configured (hidden)"
+    read -p "   Update OpenAI key? (y/N): " UPDATE_OPENAI
+    if [[ "$UPDATE_OPENAI" =~ ^[Yy]$ ]]; then
+        read -p "   Enter new OpenAI API key: " NEW_OPENAI
+        if [ -n "$NEW_OPENAI" ]; then
+            uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set openai_api_key "$NEW_OPENAI"
+            echo "   ✓ Updated"
+        fi
+    fi
+else
+    echo "   Status: not configured"
+    read -p "   Enter OpenAI API key (or press Enter to skip): " NEW_OPENAI
+    if [ -n "$NEW_OPENAI" ]; then
+        uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set openai_api_key "$NEW_OPENAI"
+        echo "   ✓ Configured"
+
+        # Ask for base URL if using custom endpoint
+        read -p "   Use custom API endpoint? (y/N): " CUSTOM_ENDPOINT
+        if [[ "$CUSTOM_ENDPOINT" =~ ^[Yy]$ ]]; then
+            echo "   Examples:"
+            echo "     - https://api.openai.com/v1"
+            echo "     - https://api.zhizengzeng.com/v1"
+            echo "     - https://your-proxy.com/v1"
+            read -p "   Enter base URL: " NEW_BASE_URL
+            if [ -n "$NEW_BASE_URL" ]; then
+                uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set openai_base_url "$NEW_BASE_URL"
+                echo "   ✓ Base URL set"
+            fi
+        fi
+    else
+        echo "   ⚠ Skipped (video transcription will use CC字幕 only)"
+    fi
+fi
+
+echo ""
+echo "=== Setup Complete ==="
+echo ""
+echo "Configuration:"
+uv run python .claude/skills/wiki-ingest/bin/wiki_config.py status
+echo ""
+echo "Directory structure:"
+echo "  wiki/entities/    - Entity pages (people, orgs, products)"
+echo "  wiki/concepts/    - Concept pages (ideas, frameworks)"
+echo "  wiki/sources/     - Source pages (papers, articles, videos)"
+echo "  wiki/synthesis/   - Synthesis pages (combined answers)"
+echo "  raw/              - Source files (PDF, video transcripts)"
+echo ""
+echo "Next steps:"
+echo "  1. Place source files in raw/ directory"
+echo "  2. Run: claude"
+echo "  3. Use skills:"
+echo "     /wiki-ingest raw/paper.pdf   - Ingest a source"
+echo "     /wiki-query <question>       - Search knowledge"
+echo "     /wiki-lint                   - Check wiki health"
+echo ""
+echo "Re-run ./setup anytime to update configuration"
+echo ""
