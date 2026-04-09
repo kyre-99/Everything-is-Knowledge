@@ -561,13 +561,27 @@ def detect_source_type(source: str) -> tuple[str, str]:
     """
     Detect source type and return (type, normalized_source).
 
-    Types: paper, video, article
+    Types: paper, video, article, arxiv
     """
+    import re
+
+    # Check if arXiv ID (e.g., 2409.05591 or arxiv:2409.05591)
+    arxiv_pattern = r'^(arxiv:)?(\d{4}\.\d{4,5})$'
+    arxiv_match = re.match(arxiv_pattern, source.lower())
+    if arxiv_match:
+        return "arxiv", arxiv_match.group(2)
+
     # Check if URL
     if source.startswith("http://") or source.startswith("https://"):
         if "bilibili.com/video/" in source:
             return "video", source
         elif source.endswith(".pdf"):
+            return "paper", source
+        elif "arxiv.org/abs/" in source or "arxiv.org/pdf/" in source:
+            # Extract arXiv ID from URL
+            arxiv_id_match = re.search(r'(\d{4}\.\d{4,5})', source)
+            if arxiv_id_match:
+                return "arxiv", arxiv_id_match.group(1)
             return "paper", source
         else:
             return "article", source
@@ -582,6 +596,10 @@ def detect_source_type(source: str) -> tuple[str, str]:
         else:
             # Try as PDF by default for local files
             return "paper", str(path.resolve())
+
+    # Check if bare arXiv ID (without prefix)
+    if re.match(r'^\d{4}\.\d{4,5}$', source):
+        return "arxiv", source
 
     # Unknown - treat as URL attempt
     return "article", source
@@ -609,6 +627,32 @@ def fetch_source(source: str, source_type: str) -> dict:
                 }
             else:
                 return {"content": "", "title": "", "metadata": {}, "success": False, "error": "bilibili_fetcher not available"}
+        elif source_type == "arxiv":
+            # Fetch from DeepXiv API
+            try:
+                from deepxiv_sdk import Reader, APIError
+                reader = Reader()
+                # Get full paper content
+                content = reader.raw(source)
+                head = reader.head(source)
+
+                title = head.get("title", source) if head else source
+
+                return {
+                    "content": content,
+                    "title": title,
+                    "metadata": {
+                        "arxiv_id": source,
+                        "authors": head.get("authors", []) if head else [],
+                        "categories": head.get("categories", []) if head else [],
+                        "publish_at": head.get("publish_at", "") if head else "",
+                    },
+                    "success": bool(content)
+                }
+            except ImportError:
+                return {"content": "", "title": "", "metadata": {}, "success": False, "error": "deepxiv_sdk not installed. Run: pip install deepxiv-sdk"}
+            except APIError as e:
+                return {"content": "", "title": "", "metadata": {}, "success": False, "error": f"DeepXiv API error: {str(e)}"}
         else:  # article
             # Check if local file
             path = Path(source)

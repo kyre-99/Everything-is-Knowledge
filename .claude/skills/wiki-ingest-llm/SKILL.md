@@ -15,13 +15,29 @@ Ingest one or more sources into the wiki using external OpenAI LLM calls for ext
 /wiki-ingest-llm https://example.com/article
 /wiki-ingest-llm raw/article.md
 
+# arXiv papers (NEW!)
+/wiki-ingest-llm 2409.05591              # arXiv ID
+/wiki-ingest-llm arxiv:2409.05591        # With prefix
+/wiki-ingest-llm https://arxiv.org/abs/2409.05591  # arXiv URL
+
 # Batch mode
 /wiki-ingest-llm raw/paper1.pdf raw/paper2.pdf https://example.com
 /wiki-ingest-llm raw/*.pdf --parallel 5
+/wiki-ingest-llm 2409.05591 2409.05592 2409.05593  # Multiple papers
 
 # JSON only (skip wiki writing)
 /wiki-ingest-llm raw/paper.pdf --no-write
 ```
+
+## Supported Source Types
+
+| Type | Example | Fetcher |
+|------|---------|---------|
+| **PDF file** | `raw/paper.pdf` | pdf_reader.py (MinerU API) |
+| **arXiv paper** | `2409.05591` | DeepXiv API |
+| **Web URL** | `https://example.com` | web_fetcher.py (Scrapling) |
+| **Bilibili video** | `https://bilibili.com/video/...` | bilibili_fetcher.py |
+| **Markdown file** | `raw/article.md` | Direct read |
 
 ## Architecture
 
