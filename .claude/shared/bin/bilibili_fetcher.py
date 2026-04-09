@@ -17,8 +17,9 @@ import re
 import time
 import os
 import tempfile
+import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import httpx
 import yt_dlp
@@ -91,11 +92,85 @@ def download_audio(url: str, output_dir: str) -> Optional[str]:
     return None
 
 
+def split_audio_file(audio_path: str, max_size_mb: int = 25) -> List[str]:
+    """
+    Split audio file into chunks under max_size_mb.
+    Uses ffmpeg if available, otherwise truncates to max size.
+
+    Returns list of chunk file paths.
+    """
+    file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+
+    if file_size_mb <= max_size_mb:
+        return [audio_path]
+
+    print(f"File size {file_size_mb:.2f}MB exceeds {max_size_mb}MB limit, splitting...", file=sys.stderr)
+
+    # Check if ffmpeg is available
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        has_ffmpeg = True
+    except:
+        has_ffmpeg = False
+        print("Warning: ffmpeg not found, will truncate audio to fit 25MB limit", file=sys.stderr)
+
+    if has_ffmpeg:
+        # Use ffmpeg to split properly
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
+                capture_output=True, text=True, check=True
+            )
+            duration = float(result.stdout.strip())
+
+            num_chunks = int(file_size_mb / max_size_mb) + 1
+            chunk_duration = duration / num_chunks
+            output_dir = tempfile.mkdtemp()
+            chunk_files = []
+
+            for i in range(num_chunks):
+                start_time = i * chunk_duration
+                chunk_path = os.path.join(output_dir, f"chunk_{i}.m4a")
+
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", audio_path,
+                     "-ss", str(start_time), "-t", str(chunk_duration),
+                     "-c", "copy", chunk_path],
+                    capture_output=True, check=True
+                )
+                chunk_files.append(chunk_path)
+
+            return chunk_files if chunk_files else [audio_path]
+        except Exception as e:
+            print(f"ffmpeg split failed: {e}, falling back to truncation", file=sys.stderr)
+
+    # Fallback: truncate to max_size_mb (binary truncation)
+    # This works for most audio formats - we just get the first part
+    output_dir = tempfile.mkdtemp()
+    truncated_path = os.path.join(output_dir, "truncated.m4a")
+    max_bytes = int(max_size_mb * 1024 * 1024)
+
+    try:
+        with open(audio_path, "rb") as src:
+            with open(truncated_path, "wb") as dst:
+                dst.write(src.read(max_bytes))
+        print(f"Truncated to {max_size_mb}MB (first {max_size_mb}MB of audio)", file=sys.stderr)
+        return [truncated_path]
+    except Exception as e:
+        print(f"Truncation failed: {e}", file=sys.stderr)
+        return [audio_path]  # Return original and let Whisper fail
+
+
 def transcribe_audio(audio_path: str) -> Optional[str]:
     """Transcribe audio using OpenAI Whisper API.
 
+    Handles files larger than 25MB by splitting into chunks.
+
     Returns transcript text or None on failure.
     """
+    MAX_FILE_SIZE_MB = 25
+
     # Get config from unified config
     api_key, base_url = get_openai_config()
 
@@ -105,16 +180,51 @@ def transcribe_audio(audio_path: str) -> Optional[str]:
 
     client = OpenAI(api_key=api_key, base_url=base_url)
 
-    try:
-        with open(audio_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-            )
-            return transcript.text
-    except Exception as e:
-        print(f"Transcription error: {e}", file=sys.stderr)
-        return None
+    # Check file size and split if needed
+    file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+
+    if file_size_mb > MAX_FILE_SIZE_MB:
+        chunk_files = split_audio_file(audio_path, MAX_FILE_SIZE_MB)
+    else:
+        chunk_files = [audio_path]
+
+    # Transcribe each chunk
+    transcripts = []
+
+    for i, chunk_path in enumerate(chunk_files):
+        chunk_size_mb = os.path.getsize(chunk_path) / (1024 * 1024)
+
+        if len(chunk_files) > 1:
+            print(f"Transcribing chunk {i+1}/{len(chunk_files)} ({chunk_size_mb:.2f}MB)...", file=sys.stderr)
+
+        try:
+            with open(chunk_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                )
+                transcripts.append(transcript.text)
+        except Exception as e:
+            print(f"Transcription error for chunk {i+1}: {e}", file=sys.stderr)
+            if len(chunk_files) == 1:
+                return None
+            # Continue with other chunks if one fails
+            continue
+        finally:
+            # Clean up chunk files if they were created
+            if chunk_path != audio_path and os.path.exists(chunk_path):
+                os.remove(chunk_path)
+
+    # Clean up temp directory if created
+    if len(chunk_files) > 1 and chunk_files[0] != audio_path:
+        chunk_dir = os.path.dirname(chunk_files[0])
+        if os.path.exists(chunk_dir):
+            try:
+                os.rmdir(chunk_dir)
+            except:
+                pass
+
+    return " ".join(transcripts) if transcripts else None
 
 
 def fetch_bilibili(url: str, max_retries: int = 3, timeout: int = 30) -> dict:

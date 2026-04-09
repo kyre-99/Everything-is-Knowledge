@@ -30,9 +30,9 @@ Ingest one or more sources into the wiki. Uses sub-agents for extraction to keep
 |-- [MAIN] Parse source list (CLI args)
 |   |
 |   |-- [PYTHON] Fetchers run (parallel for batch)
-|   |   |-- pdf_reader.py paper1.pdf -> paper1.md
-|   |   |-- pdf_reader.py paper2.pdf -> paper2.md
-|   |   |-- bilibili_fetcher.py URL -> video.md
+|   |   |-- shared/bin/pdf_reader.py paper1.pdf -> paper1.md
+|   |   |-- shared/bin/pdf_reader.py paper2.pdf -> paper2.md
+|   |   |-- shared/bin/bilibili_fetcher.py URL -> video.md
 |   |
 |   |-- [MAIN] Read index.md (entity/concept registry)
 |   |
@@ -85,19 +85,19 @@ This ensures:
 
 **For PDF:**
 ```bash
-uv run python .claude/skills/wiki-ingest/bin/pdf_reader.py "raw/paper.pdf" --pages 1-20
+uv run python .claude/shared/bin/pdf_reader.py "raw/paper.pdf" --pages 1-20
 # Auto-saves to raw/paper.md (returns JSON with saved_to path)
 ```
 
 **For Bilibili video:**
 ```bash
-uv run python .claude/skills/wiki-ingest/bin/bilibili_fetcher.py "https://www.bilibili.com/video/BV1xx..."
+uv run python .claude/shared/bin/bilibili_fetcher.py "https://www.bilibili.com/video/BV1xx..."
 # Auto-saves to raw/{title-slug}.md
 ```
 
 **For URL:**
 ```bash
-uv run python .claude/skills/wiki-ingest/bin/web_fetcher.py "https://example.com"
+uv run python .claude/shared/bin/web_fetcher.py "https://example.com"
 # Auto-saves to raw/{title-slug}.md
 ```
 
@@ -108,7 +108,7 @@ uv run python .claude/skills/wiki-ingest/bin/web_fetcher.py "https://example.com
 
 **Skip auto-save (use --no-save flag):**
 ```bash
-uv run python .claude/skills/wiki-ingest/bin/pdf_reader.py "raw/paper.pdf" --no-save
+uv run python .claude/shared/bin/pdf_reader.py "raw/paper.pdf" --no-save
 ```
 
 Store results in memory:
