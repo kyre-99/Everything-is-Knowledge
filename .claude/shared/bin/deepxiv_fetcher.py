@@ -362,7 +362,7 @@ Output formats:
     parser.add_argument("--preview", action="store_true", help="Get preview (~10k chars)")
     parser.add_argument("--json", "-j", action="store_true", help="Output JSON only")
     parser.add_argument("--no-save", action="store_true", help="Don't save to raw/")
-    parser.add_argument("--raw-dir", default="raw", help="Directory to save markdown")
+    parser.add_argument("--raw-dir", default="wiki/raw", help="Directory to save markdown")
 
     args = parser.parse_args()
 

@@ -18,34 +18,25 @@ Query the wiki to find information. Reads relevant pages and synthesizes an answ
 
 ## Workflow
 
-### Step 1: Read index.md
+### Step 1: Read cache.md
 
-Read `index.md` to understand what's in the wiki.
+Read `wiki/cache.md` to get list of all entity names.
 
 ### Step 2: Identify relevant pages
 
-Scan the index for:
-- Entity names matching keywords in the question
-- Concept names matching keywords
-- Source titles that might contain relevant information
+Match keywords from the question against:
+- Entity names in cache.md
+- File names in wiki/raw/
 
-Select up to 5 most relevant pages.
+Select up to 5 most relevant entity pages.
 
 ### Step 3: Read relevant pages
 
-Read each selected page using the Read tool.
+Read each selected entity page using the Read tool.
 
 ### Step 4: Synthesize answer
 
 Combine information from the pages into a coherent answer.
-
-**Simple question** (1-2 sources, < 500 words):
-- Return inline answer directly
-- List sources consulted at the end
-
-**Complex synthesis** (3+ sources, or > 500 words):
-- Create a synthesis page in `wiki/synthesis/`
-- Return link to the page
 
 ### Step 5: Output format
 
@@ -55,35 +46,19 @@ Combine information from the pages into a coherent answer.
 [Synthesized answer]
 
 ## Sources Consulted
-- [[Source Title]] — [what it contributed]
 - [[Entity Page]] — [what it contributed]
 ```
 
-## Creating Synthesis Pages
+Each entity page has facts with source references like `[[arxiv-2409.05591]]`.
 
-If the answer is complex, create `wiki/synthesis/{slug}.md`:
+## Wiki Structure
 
-```markdown
----
-title: [Question Topic]
-date: YYYY-MM-DD
-query: [original question]
-sources_used: [[Source 1]], [[Source 2]]
----
-
-# [Question Topic]
-
-## Question
-[original question]
-
-## Answer
-[synthesized answer]
-
-## Sources Consulted
-- [[Source Title]] — [contribution to answer]
-
-## Related Synthesis Pages
-- [[Other Synthesis]] — [relationship]
+```
+wiki/
+├── cache.md        # Entity names (one per line)
+├── entities/       # Entity pages with facts
+├── raw/            # Source documents
+└── log.md          # Operation log
 ```
 
 ## Edge Cases

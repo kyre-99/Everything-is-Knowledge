@@ -432,7 +432,7 @@ Examples:
     parser.add_argument("--user-agent", "-u", help="Custom user agent string")
     parser.add_argument("--output", "-o", help="Output file (default: stdout)")
     parser.add_argument("--no-save", action="store_true", help="Don't save fetched markdown to raw folder")
-    parser.add_argument("--raw-dir", default="raw", help="Directory to save fetched markdown (default: raw)")
+    parser.add_argument("--raw-dir", default="wiki/raw", help="Directory to save fetched markdown (default: wiki/raw)")
 
     args = parser.parse_args()
 

@@ -27,16 +27,35 @@ The setup script handles everything interactively:
 - ✓ Install Python dependencies
 - ✓ Create wiki directory structure
 - ✓ Configure MinerU API key (PDF parsing)
-- ✓ Configure OpenAI API key (video transcription)
+- ✓ Configure OpenAI API key (LLM extraction)
 - ✓ Show final configuration status
 
 ### Step 2: Done
 
 The user now has:
-- `wiki/entities/`, `wiki/concepts/`, `wiki/sources/`, `wiki/synthesis/`
-- `raw/` directory for source files
-- `wiki/index.md` and `wiki/log.md`
+- `wiki/entities/` - Entity pages
+- `wiki/raw/` - Source documents
+- `wiki/cache.md` - Entity name catalog
+- `wiki/log.md` - Operation log
 - API keys saved to `~/.wiki-config.json`
+
+## Wiki Directory Structure
+
+```
+wiki/
+├── cache.md        # Entity names (one per line)
+├── entities/       # Entity pages
+│   ├── RAG.md
+│   ├── Hongjin Qian.md
+│   └── ...
+├── raw/            # Source documents
+│   ├── arxiv-2409.05591.md
+│   ├── test-article.md
+│   └── ...
+└── log.md          # Operation log
+```
+
+**Simplified structure:** Only entities, no separate sources/concepts pages.
 
 ## Config CLI
 
@@ -44,11 +63,11 @@ After setup, use wiki_config.py to view/update config:
 
 ```bash
 # View current config
-uv run python .claude/skills/wiki-ingest/bin/wiki_config.py status
+uv run python .claude/shared/bin/wiki_config.py status
 
 # Update a key
-uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set mineru_api_key your-key
-uv run python .claude/skills/wiki-ingest/bin/wiki_config.py set openai_api_key your-key
+uv run python .claude/shared/bin/wiki_config.py set mineru_api_key your-key
+uv run python .claude/shared/bin/wiki_config.py set openai_api_key your-key
 ```
 
 ## Environment Variables
@@ -60,16 +79,14 @@ Override config file with environment variables:
 | `MINERU_API_KEY` | `mineru_api_key` |
 | `OPENAI_API_KEY` | `openai_api_key` |
 | `OPENAI_BASE_URL` | `openai_base_url` |
+| `DEEPXIV_TOKEN` | `deepxiv_token` |
 
 ## Files Created
 
 | File | Purpose |
 |------|---------|
-| `wiki/index.md` | Catalog of all sources, entities, concepts |
+| `wiki/cache.md` | Entity name catalog (one per line) |
 | `wiki/log.md` | Append-only operation log |
-| `wiki/entities/` | Entity pages |
-| `wiki/concepts/` | Concept pages |
-| `wiki/sources/` | Source pages |
-| `wiki/synthesis/` | Synthesis pages |
-| `raw/` | Source files before processing |
+| `wiki/entities/` | Entity pages (person, org, artifact, event, abstract) |
+| `wiki/raw/` | Source documents (PDFs, URLs, videos parsed to markdown) |
 | `~/.wiki-config.json` | Configuration file |

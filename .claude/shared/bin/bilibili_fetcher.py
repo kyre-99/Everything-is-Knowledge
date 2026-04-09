@@ -427,7 +427,7 @@ def main():
     # Simple argument parsing for optional flags
     url = None
     no_save = False
-    raw_dir = "raw"
+    raw_dir = "wiki/raw"
 
     for arg in sys.argv[1:]:
         if arg == "--no-save":

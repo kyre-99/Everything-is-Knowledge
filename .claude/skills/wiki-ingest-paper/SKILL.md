@@ -22,12 +22,6 @@ Search for academic papers and ingest them into the wiki with full extraction pi
 /wiki-ingest-paper --trending --days 7 --limit 20
 ```
 
-## CLI Command
-
-```bash
-uv run python .claude/skills/wiki-ingest-paper/bin/wiki_ingest_paper.py [options]
-```
-
 ## Workflow
 
 ```
@@ -35,30 +29,39 @@ uv run python .claude/skills/wiki-ingest-paper/bin/wiki_ingest_paper.py [options
          │
          ▼
     ┌─────────────────┐
-    │  DeepXiv Search │  ← 搜索论文
+    │  DeepXiv Search │
     └────────┬────────┘
              │
              ▼
     ┌─────────────────┐
-    │ 显示搜索结果     │  ← 展示标题、引用数、摘要
+    │ 显示搜索结果     │
     │ 让用户选择论文   │
     └────────┬────────┘
              │
              ▼
     ┌─────────────────┐
-    │  获取论文全文    │  ← DeepXiv API 返回 Markdown
+    │  获取论文全文    │
+    │ 保存到 wiki/raw │
     └────────┬────────┘
              │
              ▼
     ┌─────────────────┐
-    │  LLM 知识提取    │  ← OpenAI API 提取实体/概念
+    │  两阶段 LLM 提取 │
+    │  (shared module)│
     └────────┬────────┘
              │
              ▼
     ┌─────────────────┐
-    │  写入 Wiki      │  ← sources/, entities/, concepts/
+    │  写入 Entity 页 │
     └─────────────────┘
 ```
+
+## Two-Phase Extraction
+
+Uses shared LLM extractor (`shared/bin/llm_extractor.py`):
+
+1. **Phase 1: Discovery** - Find all entities (authors, methods, frameworks, concepts)
+2. **Phase 2: Context** - Generate detailed context for each entity (parallel)
 
 ## Search Options
 
@@ -113,36 +116,25 @@ Enter paper numbers to ingest (e.g., '1,3,5' or '1-3' or 'all'):
 - `1-3` - 选择第 1 到第 3 篇
 - `all` 或回车 - 选择全部
 
-## Example Output
+## Wiki Output
 
+论文导入后生成：
+
+- **Raw document**: `wiki/raw/arxiv-{id}.md` - 论文全文 markdown
+- **Entity pages**: `wiki/entities/{name}.md` - 作者、方法、框架等
+
+Entity 页面示例：
+
+```markdown
+# MemoRAG
+type: artifact
+
+## Facts
+
+- [[MemoRAG]]是一个创新的长文本处理框架，由北京大学和人民大学的研究团队于2024年提出。该框架通过全局记忆模块增强检索能力... [[arxiv-2409.05591]]
 ```
-🔍 Searching for: 'agent memory'...
 
-Found 10000 papers (showing 10):
-
-1. Memory Intelligence Agent
-   arXiv: 2604.04503 | Citations: None
-   Deep research agents (DRAs) integrate LLM reasoning...
-
-2. Agent Workflow Memory
-   arXiv: 2409.07429 | Citations: 73
-   Despite the potential of language model-based agents...
-
-Enter paper numbers to ingest: 1,2
-
-📚 Ingesting 2 papers...
-
-[1/2] Processing arXiv:2604.04503...
-  ✅ Memory Intelligence Agent: 5 entities, 3 concepts
-
-[2/2] Processing arXiv:2409.07429...
-  ✅ Agent Workflow Memory: 4 entities, 2 concepts
-
-📝 Writing wiki pages to wiki...
-Created: sources[2], entities[9], concepts[5]
-
-✅ Successfully ingested 2 papers!
-```
+每个 fact 直接附带来源文件。
 
 ## Configuration
 
@@ -152,20 +144,3 @@ DeepXiv token 自动注册（首次使用时）。OpenAI API key 需要配置：
 export OPENAI_API_KEY="your-key"
 # 或运行 /wiki-init 配置
 ```
-
-## Integration with Wiki
-
-论文导入后生成：
-
-- **Source page**: `wiki/sources/{paper-title}.md`
-  - 完整摘要
-  - 关键要点
-  - 提及的实体和概念
-
-- **Entity pages**: `wiki/entities/{name}.md`
-  - 作者、数据集、方法等
-
-- **Concept pages**: `wiki/concepts/{name}.md`
-  - 关键思想、框架、技术
-
-交叉引用使用 Obsidian 语法：`[[MemoRAG]]`, `[[RAG]]`

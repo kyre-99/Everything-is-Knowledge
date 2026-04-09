@@ -41,7 +41,7 @@ from wiki_ingest_llm import (
     process_source,
     write_all_wiki_pages,
     append_log_md,
-    parse_index_md,
+    parse_cache_md,
     get_openai_config,
 )
 from openai import OpenAI
@@ -157,7 +157,6 @@ def ingest_papers(
     arxiv_ids: List[str],
     client: OpenAI,
     existing_entities: List[dict],
-    existing_concepts: List[dict],
     wiki_dir: Path,
     model: str = "gpt-4o-mini",
 ) -> dict:
@@ -179,8 +178,8 @@ def ingest_papers(
                 arxiv_id,
                 client,
                 existing_entities,
-                existing_concepts,
                 model,
+                wiki_dir,
             )
 
             # Mark source type
@@ -194,8 +193,7 @@ def ingest_papers(
                 results.append(result)
                 title = result.get("source", {}).get("title", arxiv_id)
                 entities_count = len(result.get("entities", []))
-                concepts_count = len(result.get("concepts", []))
-                print(f"  ✅ {title}: {entities_count} entities, {concepts_count} concepts", file=sys.stderr)
+                print(f"  ✅ {title}: {entities_count} entities", file=sys.stderr)
 
         except Exception as e:
             errors.append({"source": arxiv_id, "error": str(e)})
@@ -207,15 +205,11 @@ def ingest_papers(
         summary = write_all_wiki_pages(results, wiki_dir)
         append_log_md(results, errors, wiki_dir)
 
-        print(f"Created: sources[{summary['sources_created']}], entities[{summary['entities_created']}], concepts[{summary['concepts_created']}]", file=sys.stderr)
+        print(f"Created: entities[{summary['entities_created']}]", file=sys.stderr)
     else:
         summary = {
-            "sources_created": 0,
-            "sources_updated": 0,
             "entities_created": 0,
             "entities_updated": 0,
-            "concepts_created": 0,
-            "concepts_updated": 0,
         }
 
     return {
@@ -328,7 +322,7 @@ Examples:
 
     # Ingest options
     parser.add_argument("--model", "-m", default="gpt-4o-mini", help="LLM model for extraction")
-    parser.add_argument("--index", default="wiki/index.md", help="Path to wiki index.md")
+    parser.add_argument("--cache", default="wiki/cache.md", help="Path to wiki cache.md")
     parser.add_argument("--no-write", action="store_true", help="Skip writing wiki pages, only output JSON")
 
     args = parser.parse_args()
@@ -347,10 +341,10 @@ Examples:
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=60.0)
 
     # Parse existing wiki
-    index_path = Path(args.index)
-    wiki_dir = index_path.parent
-    existing_entities, existing_concepts, _ = parse_index_md(index_path)
-    print(f"Loaded {len(existing_entities)} entities, {len(existing_concepts)} concepts from index.md", file=sys.stderr)
+    cache_path = Path(args.cache)
+    wiki_dir = cache_path.parent
+    existing_entities = parse_cache_md(cache_path)
+    print(f"Loaded {len(existing_entities)} entities from cache.md", file=sys.stderr)
 
     # Determine action
     arxiv_ids = []
@@ -387,7 +381,6 @@ Examples:
         arxiv_ids=arxiv_ids,
         client=client,
         existing_entities=existing_entities,
-        existing_concepts=existing_concepts,
         wiki_dir=wiki_dir,
         model=args.model,
     )
