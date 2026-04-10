@@ -6,7 +6,6 @@ allowed-tools:
   - Read
   - Write
   - Edit
-  - AskUserQuestion
 ---
 
 # Wiki Ingest LLM Skill
@@ -55,24 +54,8 @@ uv run python .claude/skills/wiki-ingest-llm/bin/wiki_ingest_llm.py <source1> <s
 uv run python .claude/skills/wiki-ingest-llm/bin/wiki_ingest_llm.py <source> --model gpt-4o
 ```
 
-### Step 3: Parse output
 
-The script outputs JSON with:
-```json
-{
-  "results": [
-    {
-      "source": {"title": "...", "slug": "..."},
-      "entities": [
-        {"name": "...", "type": "...", "context": "...", "is_new": true}
-      ]
-    }
-  ],
-  "errors": []
-}
-```
-
-### Step 4: Report results
+### Step 3: Report results
 
 Tell the user:
 - Number of sources processed
@@ -88,11 +71,12 @@ Tell the user:
 | `--cache` | wiki/cache.md | Path to wiki cache.md |
 | `--no-write` | - | Skip writing, only output JSON |
 
+
 ## Supported Source Types
 
 | Type | Example | Fetcher | Saved to wiki/raw |
 |------|---------|---------|-------------------|
-| **PDF file** | `wiki/raw/paper.pdf` | pdf_reader.py | `{title}.md` |
+| **PDF file** | `wiki/raw/paper.pdf` | pdf_reader.py (精准API) | `{title}.md` |
 | **arXiv paper** | `2409.05591` | DeepXiv API | `arxiv-{id}.md` |
 | **Web URL** | `https://example.com` | web_fetcher.py | `{title}.md` |
 | **Bilibili video** | `https://bilibili.com/video/...` | bilibili_fetcher.py | `{title}.md` |
@@ -100,76 +84,17 @@ Tell the user:
 
 All sources are automatically saved to `wiki/raw/` for cross-referencing.
 
-## Two-Phase Extraction
-
-LLM extraction uses a two-phase approach for better quality:
-
-```
-Phase 1: Discovery
-├── Input: document content + existing entities from cache.md
-├── Output: list of entities [{name, type}]
-└── Task: identify all entities (no context yet)
-
-Phase 2: Context Generation (parallel)
-├── Input: each entity + document content + other entity names
-├── Output: detailed context (100-200 chars)
-└── Task: write context with definition, role, details, relationships
-```
-
-## Wiki Structure
-
-```
-wiki/
-├── cache.md        # Entity names (one per line)
-├── entities/       # Entity pages with facts
-├── raw/            # Source documents
-└── log.md          # Operation log
-```
-
-## Entity Page Structure
-
-Each fact includes its source directly:
-
-```markdown
-# RAG
-type: artifact
-
-## Facts
-
-- [[RAG]] 是一种为大型语言模型提供外部知识库上下文的技术，通过检索相关文档增强生成的准确性和时效性，有效缓解模型幻觉问题 [[arxiv-2409.05591]]
-- [[MemoRAG]] 在传统 [[RAG]] 基础上引入全局记忆模块... [[test-article]]
-```
-
-## Entity Types (5 types)
-
-| Type | Description | Examples |
-|------|-------------|----------|
-| `person` | 人物 | Andrew Ng, Geoffrey Hinton |
-| `org` | 组织机构 | Google, Peking University |
-| `artifact` | 人造物 | TensorFlow, PyTorch, MemoRAG |
-| `event` | 事件 | Turing Award |
-| `abstract` | 抽象概念 | Machine Learning, RAG |
-
-## Configuration
-
-OpenAI API configuration is read from `~/.wiki-config.json`.
-
-**Priority:** Environment variables > Config file
-
-| Source | Field | Notes |
-|--------|-------|-------|
-| `OPENAI_API_KEY` (env) | API key | Highest priority |
-| `OPENAI_BASE_URL` (env) | Base URL | Override endpoint |
-| `~/.wiki-config.json` | API config | Set via wiki_config.py |
-
 ## Error Handling
 
 If the script fails:
-1. Check if OpenAI API key is configured
-2. Check if the source is accessible
-3. Report the error to the user
+1. Check if Configuration is configured
 
 ```bash
 # Check configuration
 uv run python .claude/shared/bin/wiki_config.py status
+```
+2. if pdf is parsed failed, try agent mode
+```bash
+# Check pdf_parser code to try agent mode
+v run python .claude/shared/bin//pdf_reader.py "small.pdf" --agent
 ```

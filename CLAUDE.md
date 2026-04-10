@@ -1,24 +1,5 @@
 # Project Configuration
 
-## Skill routing
-
-When the user's request matches an available skill, ALWAYS invoke it using the Skill
-tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
-The skill has specialized workflows that produce better results than ad-hoc answers.
-
-Key routing rules:
-- Product ideas, "is this worth building", brainstorming → invoke office-hours
-- Bugs, errors, "why is this broken", 500 errors → invoke investigate
-- Ship, deploy, push, create PR → invoke ship
-- QA, test the site, find bugs → invoke qa
-- Code review, check my diff → invoke review
-- Update docs after shipping → invoke document-release
-- Weekly retro → invoke retro
-- Design system, brand → invoke design-consultation
-- Visual audit, design polish → invoke design-review
-- Architecture review → invoke plan-eng-review
-- Save progress, checkpoint, resume → invoke checkpoint
-- Code quality, health check → invoke health
 
 ## Wiki Skills
 
@@ -33,13 +14,6 @@ Wiki skills are located in `.claude/skills/wiki/`. Each skill has a SKILL.md fil
 - "query the wiki", "what does my wiki say", "search my knowledge" → invoke wiki-query
 - "lint the wiki", "check wiki health", "wiki cleanup" → invoke wiki-lint
 
-## Wiki Conventions
-
-- Cross-references use Obsidian syntax: `[[Page Title]]`
-- All wiki pages have YAML frontmatter with required fields
-- `index.md` is the catalog — read it first for any query or ingest
-- `log.md` is append-only — never delete entries
-- Chinese filenames are supported (UTF-8)
 
 ## Environment
 
@@ -47,6 +21,10 @@ Python dependencies managed by `uv`:
 - `uv run python .claude/shared/bin/web_fetcher.py <url>`
 - `uv run python .claude/shared/bin/pdf_reader.py <path>`
 - `uv run python .claude/shared/bin/bilibili_fetcher.py <url>`
+
+### Bilibili Video Transcription
+
+Bilibili videos use Whisper API for transcription. Large audio files (>25MB) are automatically split using `imageio-ffmpeg` (bundled dependency, no system install needed).
 
 Configuration:
 - Run `/wiki-init` to configure the wiki

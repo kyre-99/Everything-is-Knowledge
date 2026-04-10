@@ -95,7 +95,7 @@ def download_audio(url: str, output_dir: str) -> Optional[str]:
 def split_audio_file(audio_path: str, max_size_mb: int = 25) -> List[str]:
     """
     Split audio file into chunks under max_size_mb.
-    Uses ffmpeg if available, otherwise truncates to max size.
+    Uses ffmpeg (from imageio-ffmpeg or system) to split by time.
 
     Returns list of chunk file paths.
     """
@@ -106,60 +106,88 @@ def split_audio_file(audio_path: str, max_size_mb: int = 25) -> List[str]:
 
     print(f"File size {file_size_mb:.2f}MB exceeds {max_size_mb}MB limit, splitting...", file=sys.stderr)
 
-    # Check if ffmpeg is available
-    try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
-        has_ffmpeg = True
-    except:
-        has_ffmpeg = False
-        print("Warning: ffmpeg not found, will truncate audio to fit 25MB limit", file=sys.stderr)
+    # Try to get ffmpeg executable
+    ffmpeg_exe = None
 
-    if has_ffmpeg:
-        # Use ffmpeg to split properly
+    # Option 1: Use imageio-ffmpeg (bundled, no system install needed)
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        print(f"Using bundled ffmpeg from imageio-ffmpeg", file=sys.stderr)
+    except ImportError:
+        pass
+
+    # Option 2: Use system ffmpeg
+    if not ffmpeg_exe:
         try:
-            result = subprocess.run(
-                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                 "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
-                capture_output=True, text=True, check=True
-            )
-            duration = float(result.stdout.strip())
+            subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+            ffmpeg_exe = "ffmpeg"
+        except:
+            pass
 
-            num_chunks = int(file_size_mb / max_size_mb) + 1
-            chunk_duration = duration / num_chunks
-            output_dir = tempfile.mkdtemp()
-            chunk_files = []
-
-            for i in range(num_chunks):
-                start_time = i * chunk_duration
-                chunk_path = os.path.join(output_dir, f"chunk_{i}.m4a")
-
-                subprocess.run(
-                    ["ffmpeg", "-y", "-i", audio_path,
-                     "-ss", str(start_time), "-t", str(chunk_duration),
-                     "-c", "copy", chunk_path],
-                    capture_output=True, check=True
-                )
-                chunk_files.append(chunk_path)
-
-            return chunk_files if chunk_files else [audio_path]
-        except Exception as e:
-            print(f"ffmpeg split failed: {e}, falling back to truncation", file=sys.stderr)
-
-    # Fallback: truncate to max_size_mb (binary truncation)
-    # This works for most audio formats - we just get the first part
-    output_dir = tempfile.mkdtemp()
-    truncated_path = os.path.join(output_dir, "truncated.m4a")
-    max_bytes = int(max_size_mb * 1024 * 1024)
+    if not ffmpeg_exe:
+        return [{
+            "error": f"音频文件 {file_size_mb:.1f}MB 超过 Whisper API 限制 ({max_size_mb}MB)，需要 ffmpeg 进行分割。",
+            "hint": "安装方式: uv add imageio-ffmpeg (推荐，自带ffmpeg) 或 brew install ffmpeg"
+        }]
 
     try:
-        with open(audio_path, "rb") as src:
-            with open(truncated_path, "wb") as dst:
-                dst.write(src.read(max_bytes))
-        print(f"Truncated to {max_size_mb}MB (first {max_size_mb}MB of audio)", file=sys.stderr)
-        return [truncated_path]
+        # Get audio duration using ffmpeg (more compatible than ffprobe)
+        # ffprobe might not be available in imageio-ffmpeg
+        result = subprocess.run(
+            [ffmpeg_exe, "-i", audio_path, "-f", "null", "-"],
+            capture_output=True, text=True
+        )
+        # Parse duration from stderr (ffmpeg outputs info to stderr)
+        import re
+        duration_match = re.search(r'Duration: (\d+):(\d+):(\d+\.?\d*)', result.stderr)
+        if not duration_match:
+            return [{"error": "无法获取音频时长"}]
+
+        hours, mins, secs = duration_match.groups()
+        duration = int(hours) * 3600 + int(mins) * 60 + float(secs)
+
+        # Calculate number of chunks with safety margin (target 85% of max size)
+        safe_max_mb = max_size_mb * 0.85
+        num_chunks = max(2, int(file_size_mb / safe_max_mb) + 1)
+        chunk_duration = duration / num_chunks
+
+        print(f"Audio duration: {duration:.0f}s, splitting into {num_chunks} chunks (~{chunk_duration:.0f}s each)", file=sys.stderr)
+
+        output_dir = tempfile.mkdtemp()
+        chunk_files = []
+
+        for i in range(num_chunks):
+            start_time = i * chunk_duration
+            chunk_path = os.path.join(output_dir, f"chunk_{i:03d}.m4a")
+
+            # Use ffmpeg to extract chunk (re-encode for safety)
+            result = subprocess.run(
+                [ffmpeg_exe, "-y", "-i", audio_path,
+                 "-ss", str(start_time), "-t", str(chunk_duration),
+                 "-c:a", "aac", "-b:a", "96k",  # Re-encode with lower bitrate for safety
+                 chunk_path],
+                capture_output=True, text=True
+            )
+
+            if result.returncode != 0:
+                print(f"Warning: ffmpeg chunk {i} failed: {result.stderr[:200]}", file=sys.stderr)
+                continue
+
+            # Verify chunk size
+            if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
+                chunk_size_mb = os.path.getsize(chunk_path) / (1024 * 1024)
+                chunk_files.append(chunk_path)
+                print(f"  Chunk {i+1}/{num_chunks}: {chunk_size_mb:.1f}MB", file=sys.stderr)
+
+        if chunk_files:
+            return chunk_files
+        else:
+            return [{"error": "所有音频分割尝试失败"}]
+
     except Exception as e:
-        print(f"Truncation failed: {e}", file=sys.stderr)
-        return [audio_path]  # Return original and let Whisper fail
+        print(f"ffmpeg split failed: {e}", file=sys.stderr)
+        return [{"error": f"音频分割失败: {str(e)}"}]
 
 
 def transcribe_audio(audio_path: str) -> Optional[str]:
@@ -184,7 +212,14 @@ def transcribe_audio(audio_path: str) -> Optional[str]:
     file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
 
     if file_size_mb > MAX_FILE_SIZE_MB:
-        chunk_files = split_audio_file(audio_path, MAX_FILE_SIZE_MB)
+        split_result = split_audio_file(audio_path, MAX_FILE_SIZE_MB)
+
+        # Check if split returned an error
+        if split_result and isinstance(split_result[0], dict) and "error" in split_result[0]:
+            print(f"Error: {split_result[0]['error']}", file=sys.stderr)
+            return None
+
+        chunk_files = split_result
     else:
         chunk_files = [audio_path]
 
