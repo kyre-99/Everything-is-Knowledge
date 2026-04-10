@@ -367,6 +367,7 @@ def fetch_bilibili(url: str, max_retries: int = 3, timeout: int = 30) -> dict:
                             "bvid": bvid,
                             "duration": duration_seconds,
                             "author": info.get("owner", {}).get("name", "Unknown"),
+                            "success": True,
                             "metadata": {
                                 "view_count": info.get("stat", {}).get("view", 0),
                                 "like_count": info.get("stat", {}).get("like", 0),
@@ -422,6 +423,7 @@ def fetch_bilibili(url: str, max_retries: int = 3, timeout: int = 30) -> dict:
                     "bvid": bvid,
                     "duration": duration_seconds,
                     "author": info.get("owner", {}).get("name", "Unknown"),
+                    "success": True,
                     "metadata": {
                         "view_count": info.get("stat", {}).get("view", 0),
                         "like_count": info.get("stat", {}).get("like", 0),

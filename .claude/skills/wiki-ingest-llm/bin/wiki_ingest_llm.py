@@ -378,9 +378,15 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
             if fetch_bilibili:
                 result = fetch_bilibili(source)
                 title = result.get("title", "bilibili-video")
+                bvid = result.get("bvid", "")
+                video_url = result.get("url", source)
 
-                # Save to wiki/raw/
-                if raw_dir and result.get("success"):
+                # Initialize defaults
+                saved_slug = None
+                saved_path = None
+
+                # Save to wiki/raw/ with metadata
+                if raw_dir:
                     raw_dir.mkdir(parents=True, exist_ok=True)
                     filename = f"{slugify(title)}.md"
                     saved_path = raw_dir / filename
@@ -398,13 +404,29 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
                             "_cached": True,
                         }
 
-                    saved_path.write_text(result.get("content", ""), encoding="utf-8")
+                    # Format content with metadata header
+                    author = result.get("author", "Unknown")
+                    duration = result.get("duration", 0)
+                    metadata = result.get("metadata", {})
+
+                    content_with_meta = f"""# {title}
+
+> Source: {video_url}
+> Author: {author}
+> Duration: {duration}s
+> BV ID: {bvid}
+
+---
+
+{result.get("content", "")}
+"""
+                    saved_path.write_text(content_with_meta, encoding="utf-8")
 
                 return {
                     "content": result.get("content", ""),
                     "title": title,
                     "metadata": result.get("metadata", {}),
-                    "success": result.get("success", True),
+                    "success": result.get("success", False),
                     "saved_slug": saved_slug,
                     "saved_to": str(saved_path) if saved_path else None
                 }
