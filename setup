@@ -137,7 +137,6 @@ else
         if [[ "$CUSTOM_ENDPOINT" =~ ^[Yy]$ ]]; then
             echo "   Examples:"
             echo "     - https://api.openai.com/v1"
-            echo "     - https://api.zhizengzeng.com/v1"
             echo "     - https://your-proxy.com/v1"
             read -p "   Enter base URL: " NEW_BASE_URL
             if [ -n "$NEW_BASE_URL" ]; then
