@@ -1,11 +1,15 @@
 ---
 name: wiki-init
 description: Initialize the Everything is Knowledge wiki. Creates directories, configures API keys, and sets up PDF parsing options. Run once to set up a new wiki.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
 ---
 
 # Wiki Init Skill
 
-Initialize the wiki with one command. Runs the interactive setup script.
+Initialize the wiki with one command. Checks and configures the environment.
 
 ## Usage
 
@@ -15,29 +19,70 @@ Initialize the wiki with one command. Runs the interactive setup script.
 
 ## Workflow
 
-### Step 1: Run setup script
+### Step 1: Check current configuration
 
 ```bash
-./setup
+uv run python .claude/shared/bin/wiki_config.py status
 ```
 
-The setup script handles everything interactively:
-- ✓ Check Python version (3.12+)
-- ✓ Install uv package manager
-- ✓ Install Python dependencies
-- ✓ Create wiki directory structure
-- ✓ Configure MinerU API key (PDF parsing)
-- ✓ Configure OpenAI API key (LLM extraction)
-- ✓ Show final configuration status
+This shows:
+- Config file location
+- PDF Parser setting
+- MinerU API Key status
+- OpenAI API Key status
+- OpenAI Base URL
 
-### Step 2: Done
+### Step 2: Configure API keys (if needed)
 
-The user now has:
-- `wiki/entities/` - Entity pages
-- `wiki/raw/` - Source documents
-- `wiki/cache.md` - Entity name catalog
-- `wiki/log.md` - Operation log
-- API keys saved to `~/.wiki-config.json`
+If API keys are not set, prompt the user:
+
+**Ask the user:** "Do you want to configure API keys now?"
+
+### API Keys
+
+| Key | Required? | How to Get |
+|-----|-----------|------------|
+| **OpenAI API Key** | Required for LLM extraction | https://platform.openai.com/api-keys |
+| **MinerU API Key** | Optional (PDF parsing) | https://mineru.net |
+| **DeepXiv Token** | Optional (paper search) | Auto-registers on first use |
+
+### DeepXiv Token (Optional)
+
+DeepXiv is used for paper search (`/wiki-ingest-paper`). Token is optional:
+
+- **Auto-registration**: First use will automatically register a free token
+- **Free tier**: 10,000 requests/day (sufficient for most users)
+- **Higher limits**: Visit https://data.rag.ac.cn/register and contact tommy@chien.io
+
+Configure if desired (can skip):
+```bash
+# Set DeepXiv token (optional - auto-registers on first use)
+uv run python .claude/shared/bin/wiki_config.py set deepxiv_token YOUR_TOKEN
+# Or via environment: export DEEPXIV_TOKEN=YOUR_TOKEN
+```
+
+Configure required keys:
+```bash
+# Set OpenAI API key (required for LLM extraction)
+uv run python .claude/shared/bin/wiki_config.py set openai_api_key YOUR_KEY
+
+# Set MinerU API key (optional, for PDF parsing)
+uv run python .claude/shared/bin/wiki_config.py set mineru_api_key YOUR_KEY
+```
+
+### Step 3: Create wiki directory structure
+
+```bash
+mkdir -p wiki/entities wiki/raw
+touch wiki/cache.md wiki/log.md
+```
+
+### Step 4: Verify setup
+
+```bash
+uv run python .claude/shared/bin/wiki_config.py status
+ls -la wiki/
+```
 
 ## Wiki Directory Structure
 
@@ -55,38 +100,25 @@ wiki/
 └── log.md          # Operation log
 ```
 
-**Simplified structure:** Only entities, no separate sources/concepts pages.
+## Config File
 
-## Config CLI
+Configuration is stored in `~/.wiki-config.json`.
 
-After setup, use wiki_config.py to view/update config:
+**Priority:** Environment variables > Config file > Defaults
 
-```bash
-# View current config
-uv run python .claude/shared/bin/wiki_config.py status
-
-# Update a key
-uv run python .claude/shared/bin/wiki_config.py set mineru_api_key your-key
-uv run python .claude/shared/bin/wiki_config.py set openai_api_key your-key
-```
-
-## Environment Variables
-
-Override config file with environment variables:
-
-| Variable | Config Field |
-|----------|-------------|
+| Environment Variable | Config Field |
+|---------------------|--------------|
 | `MINERU_API_KEY` | `mineru_api_key` |
 | `OPENAI_API_KEY` | `openai_api_key` |
 | `OPENAI_BASE_URL` | `openai_base_url` |
 | `DEEPXIV_TOKEN` | `deepxiv_token` |
 
-## Files Created
+## Completion
 
-| File | Purpose |
-|------|---------|
-| `wiki/cache.md` | Entity name catalog (one per line) |
-| `wiki/log.md` | Append-only operation log |
-| `wiki/entities/` | Entity pages (person, org, artifact, event, abstract) |
-| `wiki/raw/` | Source documents (PDFs, URLs, videos parsed to markdown) |
-| `~/.wiki-config.json` | Configuration file |
+After setup, tell the user:
+
+"The wiki is ready. You can now use:"
+- `/wiki-ingest-llm <source>` - Ingest PDFs, URLs, or arXiv papers
+- `/wiki-ingest-paper --search "query"` - Search and ingest academic papers
+- `/wiki-query <question>` - Query the knowledge wiki
+- `/wiki-lint` - Check wiki health

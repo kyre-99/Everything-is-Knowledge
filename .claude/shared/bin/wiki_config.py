@@ -25,6 +25,7 @@ DEFAULTS = {
     "openai_base_url": "https://api.zhizengzeng.com/v1",
     "openai_api_key": "",  # No default key for security
     "mineru_api_key": "",
+    "deepxiv_token": "",  # Optional: DeepXiv token (auto-registers on first use)
 }
 
 CONFIG_FILE = Path.home() / ".wiki-config.json"
@@ -64,6 +65,7 @@ def get_config() -> dict:
         "MINERU_BASE_URL": "mineru_base_url",
         "OPENAI_API_KEY": "openai_api_key",
         "OPENAI_BASE_URL": "openai_base_url",
+        "DEEPXIV_TOKEN": "deepxiv_token",
     }
 
     for env_key, config_key in env_mappings.items():
@@ -108,6 +110,28 @@ def get_openai_config() -> tuple[str, str]:
     return api_key, base_url
 
 
+def get_deepxiv_token() -> str:
+    """
+    Get DeepXiv token (convenience function).
+
+    Returns:
+        DeepXiv token string (empty if not configured)
+    """
+    config = get_config()
+    token = config.get("deepxiv_token", "")
+
+    # Fallback to ~/.env file (where deepxiv CLI stores it)
+    if not token:
+        env_file = Path.home() / ".env"
+        if env_file.exists():
+            for line in env_file.read_text().splitlines():
+                if line.startswith("DEEPXIV_TOKEN="):
+                    token = line.split("=", 1)[1].strip()
+                    break
+
+    return token
+
+
 def save_config(config: dict) -> bool:
     """
     Save configuration to file.
@@ -143,6 +167,7 @@ def print_config_status() -> None:
     print(f"MinerU Base URL: {config.get('mineru_base_url', 'default')}")
     print(f"OpenAI API Key: {'✓ configured' if config.get('openai_api_key') else '✗ not set'}")
     print(f"OpenAI Base URL: {config.get('openai_base_url', 'default')}")
+    print(f"DeepXiv Token: {'✓ configured' if config.get('deepxiv_token') else '✗ not set (auto-register on first use)'}")
 
 
 if __name__ == "__main__":
@@ -156,7 +181,7 @@ if __name__ == "__main__":
         elif cmd == "set":
             if len(sys.argv) < 4:
                 print("Usage: wiki_config.py set <key> <value>")
-                print("Keys: pdf_parser, mineru_api_key, mineru_base_url, openai_api_key, openai_base_url")
+                print("Keys: pdf_parser, mineru_api_key, mineru_base_url, openai_api_key, openai_base_url, deepxiv_token")
                 sys.exit(1)
 
             key = sys.argv[2]

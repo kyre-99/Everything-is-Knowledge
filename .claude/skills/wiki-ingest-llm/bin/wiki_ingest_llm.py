@@ -332,28 +332,81 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
     Args:
         source: Source identifier (URL, path, arXiv ID)
         source_type: Type of source (paper, video, article, arxiv)
-        raw_dir: Directory to save raw content (for arxiv)
+        raw_dir: Directory to save raw content
 
     Returns:
-        Dict with content, title, metadata, success
+        Dict with content, title, metadata, success, saved_slug
     """
     try:
+        saved_slug = None
+        saved_path = None
+
         if source_type == "paper":
             result = parse_pdf(source)
+            title = result.get("title", Path(source).stem)
+
+            # Save to wiki/raw/
+            if raw_dir and result.get("success"):
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                filename = f"{slugify(title)}.md"
+                saved_path = raw_dir / filename
+                saved_slug = slugify(title)
+
+                # Check if already cached (skip save if exists)
+                if saved_path.exists():
+                    return {
+                        "content": "",
+                        "title": title,
+                        "metadata": result.get("metadata", {}),
+                        "success": True,
+                        "saved_slug": saved_slug,
+                        "saved_to": str(saved_path),
+                        "_cached": True,
+                    }
+
+                saved_path.write_text(result.get("content", ""), encoding="utf-8")
+
             return {
                 "content": result.get("content", ""),
-                "title": result.get("title", ""),
+                "title": title,
                 "metadata": result.get("metadata", {}),
-                "success": result.get("success", True)
+                "success": result.get("success", True),
+                "saved_slug": saved_slug,
+                "saved_to": str(saved_path) if saved_path else None
             }
         elif source_type == "video":
             if fetch_bilibili:
                 result = fetch_bilibili(source)
+                title = result.get("title", "bilibili-video")
+
+                # Save to wiki/raw/
+                if raw_dir and result.get("success"):
+                    raw_dir.mkdir(parents=True, exist_ok=True)
+                    filename = f"{slugify(title)}.md"
+                    saved_path = raw_dir / filename
+                    saved_slug = slugify(title)
+
+                    # Check if already cached (skip save if exists)
+                    if saved_path.exists():
+                        return {
+                            "content": "",
+                            "title": title,
+                            "metadata": result.get("metadata", {}),
+                            "success": True,
+                            "saved_slug": saved_slug,
+                            "saved_to": str(saved_path),
+                            "_cached": True,
+                        }
+
+                    saved_path.write_text(result.get("content", ""), encoding="utf-8")
+
                 return {
                     "content": result.get("content", ""),
-                    "title": result.get("title", ""),
+                    "title": title,
                     "metadata": result.get("metadata", {}),
-                    "success": result.get("success", True)
+                    "success": result.get("success", True),
+                    "saved_slug": saved_slug,
+                    "saved_to": str(saved_path) if saved_path else None
                 }
             else:
                 return {"content": "", "title": "", "metadata": {}, "success": False, "error": "bilibili_fetcher not available"}
@@ -369,11 +422,29 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
                 title = head.get("title", source) if head else source
 
                 # Save to wiki/raw/arxiv-{id}.md
-                saved_path = None
                 if raw_dir and content:
                     raw_dir.mkdir(parents=True, exist_ok=True)
                     filename = f"arxiv-{source}.md"
                     saved_path = raw_dir / filename
+                    saved_slug = f"arxiv-{source}"
+
+                    # Check if already cached (skip save if exists)
+                    if saved_path.exists():
+                        return {
+                            "content": "",
+                            "title": title,
+                            "metadata": {
+                                "arxiv_id": source,
+                                "authors": head.get("authors", []) if head else [],
+                                "categories": head.get("categories", []) if head else [],
+                                "publish_at": head.get("publish_at", "") if head else "",
+                            },
+                            "success": True,
+                            "saved_slug": saved_slug,
+                            "saved_to": str(saved_path),
+                            "_cached": True,
+                        }
+
                     saved_path.write_text(content, encoding="utf-8")
 
                 return {
@@ -386,6 +457,7 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
                         "publish_at": head.get("publish_at", "") if head else "",
                     },
                     "success": bool(content),
+                    "saved_slug": saved_slug,
                     "saved_to": str(saved_path) if saved_path else None
                 }
             except ImportError:
@@ -399,20 +471,69 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
                 # Read local markdown/text file directly
                 content = path.read_text(encoding="utf-8")
                 title = path.stem  # filename without extension
+
+                # Save to wiki/raw/ (copy the file)
+                if raw_dir and content:
+                    raw_dir.mkdir(parents=True, exist_ok=True)
+                    filename = f"{slugify(title)}.md"
+                    saved_path = raw_dir / filename
+                    saved_slug = slugify(title)
+
+                    # Check if already cached (skip save if exists)
+                    if saved_path.exists():
+                        return {
+                            "content": "",
+                            "title": title,
+                            "metadata": {"source": str(path.resolve())},
+                            "success": True,
+                            "saved_slug": saved_slug,
+                            "saved_to": str(saved_path),
+                            "_cached": True,
+                        }
+
+                    saved_path.write_text(content, encoding="utf-8")
+
                 return {
                     "content": content,
                     "title": title,
                     "metadata": {"source": str(path.resolve())},
-                    "success": True
+                    "success": True,
+                    "saved_slug": saved_slug,
+                    "saved_to": str(saved_path) if saved_path else None
                 }
             else:
                 # Fetch from URL
                 result = fetch_url(source)
+                title = result.get("title", source.split("/")[-1])
+
+                # Save to wiki/raw/
+                if raw_dir and result.get("success"):
+                    raw_dir.mkdir(parents=True, exist_ok=True)
+                    filename = f"{slugify(title)}.md"
+                    saved_path = raw_dir / filename
+                    saved_slug = slugify(title)
+
+                    # Check if already cached (skip save if exists)
+                    if saved_path.exists():
+                        return {
+                            "content": "",
+                            "title": title,
+                            "metadata": result.get("metadata", {}),
+                            "success": True,
+                            "saved_slug": saved_slug,
+                            "saved_to": str(saved_path),
+                            "_cached": True,
+                        }
+
+                    saved_path.write_text(result.get("content", ""), encoding="utf-8")
+
                 return {
                     "content": result.get("content", ""),
-                    "title": result.get("title", ""),
+                    "title": title,
                     "metadata": result.get("metadata", {}),
-                    "success": result.get("success", True)
+                    "success": result.get("success", True),
+                    "saved_slug": saved_slug,
+                    "saved_to": str(saved_path) if saved_path else None
                 }
     except Exception as e:
         return {"content": "", "title": "", "metadata": {}, "success": False, "error": str(e)}
@@ -421,6 +542,17 @@ def fetch_source(source: str, source_type: str, raw_dir: Path = None) -> dict:
 # ============================================================================
 # Main Processing
 # ============================================================================
+
+def check_source_cached(source_slug: str, wiki_dir: Path) -> bool:
+    """
+    Check if source has been parsed before.
+
+    Returns True if wiki/raw/{source_slug}.md exists.
+    """
+    raw_dir = wiki_dir / "raw"
+    cached_file = raw_dir / f"{source_slug}.md"
+    return cached_file.exists()
+
 
 def process_source(
     source: str,
@@ -437,11 +569,47 @@ def process_source(
     source_type, normalized_source = detect_source_type(source)
     print(f"  [{source_type}] Processing: {source[:50]}...", file=sys.stderr)
 
-    # Determine raw_dir for saving arxiv content
+    # Determine raw_dir for saving all source content
     raw_dir = wiki_dir / "raw" if wiki_dir else None
 
-    # Fetch
+    # Check cache BEFORE fetching (for types where slug is predictable)
+    if source_type == "arxiv":
+        source_slug = f"arxiv-{normalized_source}"
+        if raw_dir and check_source_cached(source_slug, wiki_dir):
+            print(f"  ⏭️ Already parsed (cached: raw/{source_slug}.md)", file=sys.stderr)
+            return {
+                "source": {"title": normalized_source, "slug": source_slug},
+                "entities": [],
+                "_source_slug": source_slug,
+                "_cached": True,
+            }
+    elif source_type == "paper" and not source.startswith("http"):
+        # Local PDF file - check cache by filename stem
+        path = Path(source)
+        if path.exists() and raw_dir:
+            preliminary_slug = slugify(path.stem)
+            if check_source_cached(preliminary_slug, wiki_dir):
+                print(f"  ⏭️ Already parsed (cached: raw/{preliminary_slug}.md)", file=sys.stderr)
+                return {
+                    "source": {"title": path.stem, "slug": preliminary_slug},
+                    "entities": [],
+                    "_source_slug": preliminary_slug,
+                    "_cached": True,
+                }
+
+    # Fetch (saves content to wiki/raw/)
     fetch_result = fetch_source(normalized_source, source_type, raw_dir)
+
+    # Check cache flag from fetch_result (for URL types where slug comes from title)
+    if fetch_result.get("_cached"):
+        print(f"  ⏭️ Already parsed (cached: raw/{fetch_result['saved_slug']}.md)", file=sys.stderr)
+        return {
+            "source": {"title": fetch_result.get("title", source), "slug": fetch_result["saved_slug"]},
+            "entities": [],
+            "_source_slug": fetch_result["saved_slug"],
+            "_cached": True,
+        }
+
     if not fetch_result.get("success"):
         return {
             "source": {"title": source, "slug": slugify(source)},
@@ -462,7 +630,9 @@ def process_source(
     # Extract using two-phase approach
     result = extract_two_phase(client, content, source_type, existing_entities, model)
 
-    # Store saved path for arxiv
+    # Store saved slug/path for wiki cross-references
+    if fetch_result.get("saved_slug"):
+        result["_source_slug"] = fetch_result["saved_slug"]
     if fetch_result.get("saved_to"):
         result["_saved_to"] = fetch_result["saved_to"]
 
@@ -518,17 +688,13 @@ def main():
                 result["_source_type"] = source_type
                 result["_source_url"] = normalized_source
 
-                # Calculate source_slug from actual file path
-                # For local files: extract filename without extension
-                # For URLs/arXiv: use the last part of path or arxiv ID
-                if Path(src).exists():
-                    # Local file: use filename without extension
-                    result["_source_slug"] = Path(src).stem
-                elif source_type == "arxiv":
-                    result["_source_slug"] = f"arxiv-{normalized_source}"
-                else:
-                    # URL: use a slug from the URL path
-                    result["_source_slug"] = slugify(src.split("/")[-1].split("?")[0])
+                # source_slug is already set by process_source() from saved file
+                # Fallback only if not set (e.g., fetch failed)
+                if not result.get("_source_slug"):
+                    if source_type == "arxiv":
+                        result["_source_slug"] = f"arxiv-{normalized_source}"
+                    else:
+                        result["_source_slug"] = slugify(src.split("/")[-1].split("?")[0])
 
                 if "error" in result and result.get("entities") is None:
                     errors.append({"source": src, "error": result.get("error")})

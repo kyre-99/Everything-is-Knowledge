@@ -44,15 +44,34 @@ from wiki_ingest_llm import (
     parse_cache_md,
     get_openai_config,
 )
+
+
+# Import wiki config for DeepXiv token
+WIKI_CONFIG_DIR = SCRIPT_DIR.parent.parent.parent / "shared" / "bin"
+sys.path.insert(0, str(WIKI_CONFIG_DIR))
+
+try:
+    from wiki_config import get_deepxiv_token
+except ImportError:
+    # Fallback if wiki_config not available
+    def get_deepxiv_token() -> Optional[str]:
+        return None
 from openai import OpenAI
 
 
 def get_token() -> Optional[str]:
-    """Get DeepXiv token from environment or config."""
+    """Get DeepXiv token from wiki config, environment, or ~/.env."""
+    # 1. Check wiki config (~/.wiki-config.json)
+    token = get_deepxiv_token()
+    if token:
+        return token
+
+    # 2. Check environment variable
     token = os.environ.get("DEEPXIV_TOKEN")
     if token:
         return token
 
+    # 3. Check ~/.env (where deepxiv CLI stores it)
     env_file = Path.home() / ".env"
     if env_file.exists():
         for line in env_file.read_text().splitlines():

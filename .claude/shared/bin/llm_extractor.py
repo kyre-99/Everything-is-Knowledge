@@ -85,8 +85,6 @@ Write ONE detailed context paragraph (100-200 Chinese characters) that includes:
 - 关键细节: Important characteristics, features, or contributions
 - 关系: How does it relate to other entities mentioned?
 
-Example good context:
-"MemoRAG是一个创新的长文本处理框架，由北京大学和人民大学的研究团队于2024年提出。该框架通过全局记忆模块增强检索能力，解决了传统RAG方法在处理超长文本时的信息丢失问题。实验表明，MemoRAG在LongBench和InfiniteBench等基准测试中显著优于现有方法，特别适合需要跨文档推理的复杂问答场景。"
 
 OUTPUT FORMAT (JSON only, no markdown):
 {{

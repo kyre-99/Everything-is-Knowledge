@@ -7,6 +7,27 @@ set -e
 echo "=== Everything is Knowledge Setup ==="
 echo ""
 
+# --- Pre-requisites Check ---
+echo "=== Prerequisites ==="
+echo ""
+echo "Please ensure the following tools are installed before proceeding:"
+echo ""
+echo "  • Claude Code CLI - AI-powered assistant"
+echo "    Website: https://claude.ai/code"
+echo "    Install: npm install -g @anthropic-ai/claude-code"
+echo ""
+echo "  • Obsidian - Note-taking app (for viewing wiki)"
+echo "    Website: https://obsidian.md"
+echo "    macOS: brew install --cask obsidian"
+echo "    Linux: snap install obsidian or flatpak install flathub md.obsidian.Obsidian"
+echo ""
+read -p "Continue setup? (Y/n): " CONTINUE_SETUP
+if [[ ! "$CONTINUE_SETUP" =~ ^[Yy]$ ]] && [[ -n "$CONTINUE_SETUP" ]]; then
+    echo "Aborted. Please install the prerequisites first."
+    exit 1
+fi
+echo ""
+
 # Check Python version
 PYTHON_VERSION=$(python3 --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' || echo "0")
 REQUIRED_VERSION="3.12"

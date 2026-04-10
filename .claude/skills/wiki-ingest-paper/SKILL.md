@@ -1,6 +1,11 @@
 ---
 name: wiki-ingest-paper
 description: Search and ingest academic papers from arXiv/PMC into the wiki. Supports keyword search, trending papers, and direct arXiv ID lookup.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - AskUserQuestion
 ---
 
 # Wiki Ingest Paper Skill
@@ -24,75 +29,56 @@ Search for academic papers and ingest them into the wiki with full extraction pi
 
 ## Workflow
 
-```
-/wiki-ingest-paper --search "agent memory"
-         │
-         ▼
-    ┌─────────────────┐
-    │  DeepXiv Search │
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │ 显示搜索结果     │
-    │ 让用户选择论文   │
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │  获取论文全文    │
-    │ 保存到 wiki/raw │
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │  两阶段 LLM 提取 │
-    │  (shared module)│
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │  写入 Entity 页 │
-    └─────────────────┘
-```
+### Step 1: Parse arguments
 
-## Two-Phase Extraction
+Determine the action:
+- `--search <query>` → Search papers, show results, let user select
+- `--arxiv <id>` → Direct import by arXiv ID
+- `--trending` → Show trending papers, let user select
 
-Uses shared LLM extractor (`shared/bin/llm_extractor.py`):
-
-1. **Phase 1: Discovery** - Find all entities (authors, methods, frameworks, concepts)
-2. **Phase 2: Context** - Generate detailed context for each entity (parallel)
-
-## Search Options
-
-| 参数 | 示例 | 说明 |
-|------|------|------|
-| `--search` | "agent memory" | 搜索关键词 |
-| `--limit` | 20 | 返回结果数 (默认 10, 最大 100) |
-| `--categories` | cs.AI,cs.CL | 按类别筛选 |
-| `--min-citations` | 50 | 最少引用数 |
-
-## Direct Import
-
-直接传入 arXiv ID，跳过搜索步骤：
+### Step 2: Run the ingest script
 
 ```bash
-# 单篇论文
-/wiki-ingest-paper --arxiv 2409.05591
+# Search for papers
+uv run python .claude/skills/wiki-ingest-paper/bin/wiki_ingest_paper.py --search "agent memory"
 
-# 多篇论文
-/wiki-ingest-paper --arxiv 2409.05591 2409.05592 2409.05593
+# Direct import
+uv run python .claude/skills/wiki-ingest-paper/bin/wiki_ingest_paper.py --arxiv 2409.05591
+
+# Trending papers
+uv run python .claude/skills/wiki-ingest-paper/bin/wiki_ingest_paper.py --trending --days 7
 ```
 
-## Trending Papers
+### Step 3: Interactive selection (for search/trending)
 
-获取近期热门论文：
+The script will display results and prompt for selection:
+```
+1. Paper Title Here
+   arXiv: 2409.05591 | Citations: 50
+   Abstract preview...
 
-```bash
-/wiki-ingest-paper --trending --days 7 --limit 20
+Enter paper numbers to ingest (e.g., '1,3,5' or '1-3' or 'all'):
 ```
 
-`--days` 可选值：7, 14, 30
+### Step 4: Report results
+
+After ingestion, report:
+- Number of papers ingested
+- Entities created
+- Any errors
+
+## CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--search`, `-s` | Search query for papers |
+| `--arxiv`, `-a` | arXiv paper ID(s) to ingest directly |
+| `--trending`, `-t` | Get trending papers |
+| `--limit`, `-l` | Number of results (default: 10, max: 100) |
+| `--categories`, `-c` | Filter by arXiv categories (comma-separated) |
+| `--min-citations` | Minimum citation count |
+| `--days` | Trending days (7, 14, 30) |
+| `--model`, `-m` | LLM model for extraction (default: gpt-4o-mini) |
 
 ## Common arXiv Categories
 
@@ -104,43 +90,64 @@ Uses shared LLM extractor (`shared/bin/llm_extractor.py`):
 - `cs.SE` - 软件工程
 - `stat.ML` - 机器学习 (统计)
 
-## Interactive Selection
-
-搜索后会显示结果列表，用户可以：
+## Example Output
 
 ```
-Enter paper numbers to ingest (e.g., '1,3,5' or '1-3' or 'all'):
-```
+📚 Ingesting 3 papers...
 
-- `1,3,5` - 选择第 1、3、5 篇
-- `1-3` - 选择第 1 到第 3 篇
-- `all` 或回车 - 选择全部
+[1/3] Processing arXiv:2409.05591...
+  ✅ MemoRAG: 15 entities
+
+[2/3] Processing arXiv:2409.05592...
+  ✅ Another Paper: 8 entities
+
+📝 Writing wiki pages...
+Created: entities[23]
+Updated: cache.md
+```
 
 ## Wiki Output
 
-论文导入后生成：
+Papers are saved to:
+- **Raw document**: `wiki/raw/arxiv-{id}.md` - Full paper markdown
+- **Entity pages**: `wiki/entities/{name}.md` - Authors, methods, frameworks
 
-- **Raw document**: `wiki/raw/arxiv-{id}.md` - 论文全文 markdown
-- **Entity pages**: `wiki/entities/{name}.md` - 作者、方法、框架等
+## Two-Phase Extraction
 
-Entity 页面示例：
+Uses shared LLM extractor (`shared/bin/llm_extractor.py`):
 
-```markdown
-# MemoRAG
-type: artifact
-
-## Facts
-
-- [[MemoRAG]]是一个创新的长文本处理框架，由北京大学和人民大学的研究团队于2024年提出。该框架通过全局记忆模块增强检索能力... [[arxiv-2409.05591]]
-```
-
-每个 fact 直接附带来源文件。
+1. **Phase 1: Discovery** - Find all entities (authors, methods, frameworks, concepts)
+2. **Phase 2: Context** - Generate detailed context for each entity (parallel)
 
 ## Configuration
 
-DeepXiv token 自动注册（首次使用时）。OpenAI API key 需要配置：
+DeepXiv token is optional (auto-registers on first use, 10,000 requests/day free tier).
 
 ```bash
-export OPENAI_API_KEY="your-key"
-# 或运行 /wiki-init 配置
+# Check configuration
+uv run python .claude/shared/bin/wiki_config.py status
+
+# Set OpenAI API key (required for LLM extraction)
+uv run python .claude/shared/bin/wiki_config.py set openai_api_key YOUR_KEY
+
+# Set DeepXiv token (optional - skip for auto-registration)
+uv run python .claude/shared/bin/wiki_config.py set deepxiv_token YOUR_TOKEN
+# Or: export DEEPXIV_TOKEN=YOUR_TOKEN
+
+# For higher DeepXiv limits: https://data.rag.ac.cn/register
 ```
+
+### Token Priority
+
+DeepXiv token is fetched in order:
+1. `~/.wiki-config.json` (`deepxiv_token` field)
+2. Environment variable `DEEPXIV_TOKEN`
+3. `~/.env` (where deepxiv CLI stores auto-registered tokens)
+4. Auto-registration on first use (if none found)
+
+## Error Handling
+
+If the script fails:
+1. Check if OpenAI API key is configured
+2. Check if deepxiv-sdk is installed (`pip install deepxiv-sdk`)
+3. Report the error to the user

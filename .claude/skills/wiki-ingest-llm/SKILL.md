@@ -1,6 +1,12 @@
 ---
 name: wiki-ingest-llm
 description: Ingest sources into the wiki using external LLM extraction (faster batch processing). Fully automated - fetches, extracts, and writes wiki pages in one command.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - AskUserQuestion
 ---
 
 # Wiki Ingest LLM Skill
@@ -25,15 +31,74 @@ Ingest one or more sources into the wiki using external OpenAI LLM calls for ext
 /wiki-ingest-llm wiki/raw/*.pdf --parallel 5
 ```
 
+## Workflow
+
+### Step 1: Parse arguments
+
+Determine source type from the input:
+- **PDF file**: Path ending in `.pdf` → use `pdf_reader.py`
+- **arXiv ID**: `2409.05591` or `arxiv:2409.05591` → use DeepXiv API
+- **Web URL**: `https://...` → use `web_fetcher.py`
+- **Bilibili video**: `https://bilibili.com/video/...` → use `bilibili_fetcher.py`
+- **Markdown file**: Path ending in `.md` → read directly
+
+### Step 2: Run the ingest script
+
+```bash
+# Single source
+uv run python .claude/skills/wiki-ingest-llm/bin/wiki_ingest_llm.py <source>
+
+# Multiple sources (batch)
+uv run python .claude/skills/wiki-ingest-llm/bin/wiki_ingest_llm.py <source1> <source2> --parallel 5
+
+# With specific model
+uv run python .claude/skills/wiki-ingest-llm/bin/wiki_ingest_llm.py <source> --model gpt-4o
+```
+
+### Step 3: Parse output
+
+The script outputs JSON with:
+```json
+{
+  "results": [
+    {
+      "source": {"title": "...", "slug": "..."},
+      "entities": [
+        {"name": "...", "type": "...", "context": "...", "is_new": true}
+      ]
+    }
+  ],
+  "errors": []
+}
+```
+
+### Step 4: Report results
+
+Tell the user:
+- Number of sources processed
+- Entities created vs updated
+- Any errors encountered
+
+## CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--parallel`, `-p` | 10 | Max parallel workers |
+| `--model`, `-m` | gpt-4o-mini | LLM model for extraction |
+| `--cache` | wiki/cache.md | Path to wiki cache.md |
+| `--no-write` | - | Skip writing, only output JSON |
+
 ## Supported Source Types
 
-| Type | Example | Fetcher | Output |
-|------|---------|---------|--------|
-| **PDF file** | `wiki/raw/paper.pdf` | pdf_reader.py | `wiki/raw/paper.md` |
-| **arXiv paper** | `2409.05591` | DeepXiv API | `wiki/raw/arxiv-2409.05591.md` |
-| **Web URL** | `https://example.com` | web_fetcher.py | `wiki/raw/{title}.md` |
-| **Bilibili video** | `https://bilibili.com/video/...` | bilibili_fetcher.py | `wiki/raw/{title}.md` |
-| **Markdown file** | `wiki/raw/article.md` | Direct read | - |
+| Type | Example | Fetcher | Saved to wiki/raw |
+|------|---------|---------|-------------------|
+| **PDF file** | `wiki/raw/paper.pdf` | pdf_reader.py | `{title}.md` |
+| **arXiv paper** | `2409.05591` | DeepXiv API | `arxiv-{id}.md` |
+| **Web URL** | `https://example.com` | web_fetcher.py | `{title}.md` |
+| **Bilibili video** | `https://bilibili.com/video/...` | bilibili_fetcher.py | `{title}.md` |
+| **Markdown file** | `wiki/raw/article.md` | Direct read | `{filename}.md` |
+
+All sources are automatically saved to `wiki/raw/` for cross-referencing.
 
 ## Two-Phase Extraction
 
@@ -51,69 +116,13 @@ Phase 2: Context Generation (parallel)
 └── Task: write context with definition, role, details, relationships
 ```
 
-**Why two phases?**
-- Phase 1 focuses on "finding who" - less likely to miss entities
-- Phase 2 focuses on "describing who" - each entity gets full attention
-- Existing entities also get new facts from new documents
-
-## Architecture
-
-```
-/wiki-ingest-llm workflow:
-|
-|-- [CLI] wiki_ingest_llm.py
-|   |-- Parse CLI args
-|   |-- Load cache.md (existing entities)
-|   |-- Load OpenAI config
-|   |
-|   |-- [FETCH] Parallel (max 10)
-|   |   |-- Detect source type
-|   |   |-- Fetch content (pdf_reader/web_fetcher/deepxiv/bilibili)
-|   |   |-- Save raw to wiki/raw/
-|   |
-|   |-- [EXTRACT] Call shared/bin/llm_extractor.py
-|   |   |-- Phase 1: Discovery (1 API call)
-|   |   |-- Check existing entities
-|   |   |-- Phase 2: Context generation (N API calls, parallel)
-|   |
-|   |-- [WRITE]
-|   |   |-- wiki/entities/{slug}.md (create or update)
-|   |   |-- wiki/cache.md (append new entity names)
-|   |   |-- wiki/log.md (append entry)
-|   |
-|   |-- Output JSON
-```
-
-## Shared Module
-
-Core extraction logic is in `shared/bin/llm_extractor.py`:
-
-```python
-from llm_extractor import extract_two_phase, slugify, convert_to_wiki_links
-
-result = extract_two_phase(
-    client=OpenAI(),
-    content=document_content,
-    source_type="paper",
-    existing_entities=[{"name": "RAG", "slug": "RAG"}],
-    model="gpt-4o-mini",
-)
-# Returns: {"entities": [{name, type, context, is_new, existing_slug}]}
-```
-
 ## Wiki Structure
 
 ```
 wiki/
 ├── cache.md        # Entity names (one per line)
-├── entities/       # Entity pages
-│   ├── RAG.md
-│   ├── Hongjin Qian.md
-│   └── ...
-├── raw/            # Original documents
-│   ├── arxiv-2409.05591.md
-│   ├── test-article.md
-│   └── ...
+├── entities/       # Entity pages with facts
+├── raw/            # Source documents
 └── log.md          # Operation log
 ```
 
@@ -131,8 +140,6 @@ type: artifact
 - [[MemoRAG]] 在传统 [[RAG]] 基础上引入全局记忆模块... [[test-article]]
 ```
 
-**Note:** No separate Source Documents section - source is attached to each fact.
-
 ## Entity Types (5 types)
 
 | Type | Description | Examples |
@@ -142,26 +149,6 @@ type: artifact
 | `artifact` | 人造物 | TensorFlow, PyTorch, MemoRAG |
 | `event` | 事件 | Turing Award |
 | `abstract` | 抽象概念 | Machine Learning, RAG |
-
-## cache.md Format
-
-```
-Andrew Ng
-Geoffrey Hinton
-TensorFlow
-PyTorch
-```
-
-Each line is one entity name (exact name, preserves case and spaces).
-
-## CLI Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--parallel`, `-p` | 10 | Max parallel workers |
-| `--model`, `-m` | gpt-4o-mini | LLM model for extraction |
-| `--cache` | wiki/cache.md | Path to wiki cache.md |
-| `--no-write` | - | Skip writing, only output JSON |
 
 ## Configuration
 
@@ -175,12 +162,14 @@ OpenAI API configuration is read from `~/.wiki-config.json`.
 | `OPENAI_BASE_URL` (env) | Base URL | Override endpoint |
 | `~/.wiki-config.json` | API config | Set via wiki_config.py |
 
-## Wiki Link Conversion
+## Error Handling
 
-After extraction, entity names in context are automatically converted to Wiki Links.
+If the script fails:
+1. Check if OpenAI API key is configured
+2. Check if the source is accessible
+3. Report the error to the user
 
-**Matching rule:** By entity name length descending.
-
-Example: `MemoRAG` matches before `RAG` (longer first).
-
-**Nesting prevention:** Text already inside `[[...]]` is skipped.
+```bash
+# Check configuration
+uv run python .claude/shared/bin/wiki_config.py status
+```
